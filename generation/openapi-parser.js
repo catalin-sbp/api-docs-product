@@ -1,18 +1,28 @@
 const write = require('./write-templates')
+const pathUtility = require('path')
 const querystring = require('querystring')
 const SwaggerParser = require('swagger-parser')
 const ramlParser = require('./raml-parser')
-const info = require('../info')
-const reporter = require('../reporter')
+const reporter = require('../utils/reporter')
 
-async function parse (path, rootDirectory, examplesPath, params) {
-  reporter.log('Parsing ' + path)
+async function parse (path, rootDirectory, examplesPath, params, request) {
+  var filename = pathUtility.parse(path).base
+
+  reporter.log(request, 'Parsing ' + filename)
   var api = await SwaggerParser.dereference(path).catch((error) => {
     console.log(error)
   })
 
   if (!api) {
-    return -1
+    return ''
+  }
+
+  var title = filename.split('.')[0]
+
+  if (api.info && api.info.title) {
+    title = api.info.title.replace('Swagger', '').trim()
+  } else {
+    reporter.log(request, 'This API specification does not have a title')
   }
 
   var contentType = null
@@ -58,6 +68,10 @@ async function parse (path, rootDirectory, examplesPath, params) {
     var endPoint = api.paths[uri]
     params.uri = uri
 
+    if (uri === '/pet/findByTags' || uri === '/pet/{petId}/uploadImage') {
+      continue /// ////////////////////
+    }
+
     for (var operation in endPoint) {
       if (operation !== 'parameters') {
         params.request_method = operation
@@ -70,16 +84,22 @@ async function parse (path, rootDirectory, examplesPath, params) {
           params.query_string = queryString
         }
 
-        var bodyValue = getBody(endPoint[operation])
+        var bodyValue = getBody(endPoint[operation], request)
         if (bodyValue) {
           params.body = bodyValue
+          params.pyBody = bodyValue
+          params.javaBody = bodyValue
+          setBody(endPoint[operation], params)
+        } else {
+          params.pyBody = ''
+          params.javaBody = ''
         }
 
-        setHeaders(endPoint[operation], contentType, params)
+        setHeaders(endPoint[operation], contentType, params, request)
 
         ramlParser.setCurl(params)
 
-        write.writeExampleFiles(params, examplesPath, rootDirectory)
+        write.writeExampleFiles(params, examplesPath, rootDirectory, request)
         write.writeDebug(debug, params, examplesPath)
 
         params.desc = null
@@ -88,9 +108,13 @@ async function parse (path, rootDirectory, examplesPath, params) {
         params.body = null
         params.headers = null
         params.query_string = null
+        params.pyBody = null
+        params.javaHeaders = null
       }
     }
   }
+
+  return title
 }
 
 function getDebug (dict, debug) {
@@ -121,7 +145,9 @@ function getDebug (dict, debug) {
         paramKey = key.replace('?', '')
         debug[paramKey] = 'STUB'
       } else {
-        getDebug(data, debug)
+        setTimeout(function () {
+          getDebug(data, debug)
+        }, 0)
       }
     } else if (data.constructor === Array) {
       for (var index in data) {
@@ -177,13 +203,13 @@ function getQueryString (operation) {
   return null
 }
 
-function getBody (operation) {
+function getBody (operation, request) {
   var hasBody = false
 
   if (operation.requestBody) {
     hasBody = true
 
-    if (info.conf.ignore_body_examples) {
+    if (request.conf.ignore_body_examples) {
       return JSON.stringify({})
     }
 
@@ -201,7 +227,7 @@ function getBody (operation) {
       if (parameter.in === 'body') {
         hasBody = true
 
-        if (info.conf.ignore_body_examples) {
+        if (request.conf.ignore_body_examples) {
           return JSON.stringify({})
         }
         example = getExample(parameter)
@@ -220,7 +246,38 @@ function getBody (operation) {
   return null
 }
 
-function setHeaders (operation, contentType, params) {
+function setBody (operation, params) {
+  if (params.body) {
+    params.pyBody = params.body
+    var checkBoolValue = params.pyBody.split('"')
+    for (var index = 0; index < checkBoolValue.length; index += 2) {
+      if (checkBoolValue[index].includes('true')) {
+        checkBoolValue[index] = checkBoolValue[index].split('true').join('True')
+      }
+      if (checkBoolValue[index].includes('false')) {
+        checkBoolValue[index] = checkBoolValue[index].split('false').join('False')
+      }
+    }
+    params.pyBody = checkBoolValue.join('"')
+    checkBoolValue = params.pyBody.split("'")
+    for (index = 0; index < checkBoolValue.length; index += 2) {
+      if (checkBoolValue[index].includes('true')) {
+        checkBoolValue[index] = checkBoolValue[index].split('true').join('True')
+      }
+      if (checkBoolValue[index].includes('false')) {
+        checkBoolValue[index] = checkBoolValue[index].split('false').join('False')
+      }
+    }
+    params.pyBody = checkBoolValue.join("'")
+    params.javaBody = params.body
+    params.javaBody = params.javaBody.split('"').join('\\"').split(/\r\n|\r|\n/).join('')
+    params.body = JSON.stringify({})
+    params.pyBody = JSON.stringify({})
+    params.javaBody = JSON.stringify({})
+  }
+}
+
+function setHeaders (operation, contentType, params, request) {
   var headers = {}
 
   if (operation.parameters) {
@@ -243,13 +300,21 @@ function setHeaders (operation, contentType, params) {
     headers['Content-Type'] = contentType
   }
 
-  if (info.authentication !== 'None' && headers.Authorization === undefined) {
-    headers.Authorization = info.authentication + ' <ACCESS_TOKEN>'
+  if (request.authentication !== 'None' && headers.Authorization === undefined) {
+    headers.Authorization = request.authentication + ' <ACCESS_TOKEN>'
   }
 
   if (JSON.stringify(headers) !== JSON.stringify({})) {
     params.headers = JSON.stringify(headers, null, 4)
-  }
+    var toParseAsJavaHeader = []
+    if (params.headers) {
+      toParseAsJavaHeader = params.headers.split('"')
+    }
+    params.javaHeaders = ''
+    for (var index = 1; index < toParseAsJavaHeader.length; index += 4) {
+      params.javaHeaders += '\t\t\t' + 'request.addHeader("' + toParseAsJavaHeader[index] + '", "' + toParseAsJavaHeader[index + 2] + '");\n'
+    }
+  } else { params.javaHeaders = '' }
 }
 
 function getExample (parameter) {

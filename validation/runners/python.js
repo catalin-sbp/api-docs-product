@@ -2,21 +2,26 @@ const CodeRunner = require('./code').CodeRunner
 const tempDirectory = require('temp-dir')
 const fs = require('fs-extra')
 const pathLib = require('path')
-const utils = require('../utils')
+const utils = require('../../utils/run-command')
 const errors = require('../errors')
-const debug = require('../../reporter').debug
-const info = require('../../info')
+const debug = require('../../utils/reporter').debug
+const info = require('../../conf/info')
 const util = require('util')
 const ejs = require('ejs')
 const querystring = require('querystring')
+const constants = require('../../constants')
 
 class PythonRunner extends CodeRunner {
-  constructor () {
-    super()
+  constructor (request) {
+    super(request)
 
     var tmpPath = tempDirectory
-    this._virtualenvPath = tmpPath + pathLib.sep + info.conf.virtualenv_name
+    this._virtualenvPath = tmpPath + pathLib.sep + request.conf.virtualenv_name
     this._pythonPath = this._virtualenvPath + pathLib.sep + 'bin' + pathLib.sep + 'python'
+
+    if (info.onWindows) {
+      this._pythonPath = this._virtualenvPath + pathLib.sep + 'Scripts' + pathLib.sep + 'python'
+    }
 
     this._createVirtualenvIfNeeded()
   }
@@ -102,19 +107,19 @@ class PythonRunner extends CodeRunner {
   }
 
   _createVirtualenvIfNeeded () {
-    if (info.conf.always_create_environments && fs.existsSync(this._virtualenvPath)) {
-      debug('Removing virtualenv: ' + this._virtualenvPath)
+    if (this.request.conf.always_create_environments && fs.existsSync(this._virtualenvPath)) {
+      debug(this.request, 'Removing virtualenv: ' + this._virtualenvPath)
       fs.removeSync(this._virtualenvPath)
     }
 
     if (!fs.existsSync(this._pythonPath)) {
-      debug('Creating virtualenv: ' + this._virtualenvPath)
-      utils.runShellCommand('pip install virtualenv')
+      debug(this.request, 'Creating virtualenv: ' + this._virtualenvPath)
+      utils.runShellCommand('pip install virtualenv', this.request.conf.virtualenv_creation_timeout)
 
       if (!fs.existsSync(this._virtualenvPath)) {
         fs.mkdirSync(this._virtualenvPath)
       }
-      utils.runShellCommand('virtualenv ' + this._virtualenvPath)
+      utils.runShellCommand('virtualenv ' + this._virtualenvPath, this.request.conf.virtualenv_creation_timeout)
 
       this._installPythonPackages()
     }
@@ -124,17 +129,21 @@ class PythonRunner extends CodeRunner {
     var packages = ['requests']
     var pipPath = this._virtualenvPath + pathLib.sep + 'bin' + pathLib.sep + 'pip'
 
-    utils.runShellCommand(pipPath + ' install ' + packages.join(' '), info.conf.virtualenv_creation_timeout, this._virtualenvPath)
+    if (info.onWindows) {
+      pipPath = this._virtualenvPath + pathLib.sep + 'Scripts' + pathLib.sep + 'pip'
+    }
+
+    utils.runShellCommand(pipPath + ' install ' + packages.join(' '), this.request.conf.virtualenv_creation_timeout, this._virtualenvPath)
   }
 
   _runSample (samplePath) {
-    var result = utils.runShellCommand(this._pythonPath + ' ' + samplePath)
-    var template = fs.readFileSync(info.templatesFolder + pathLib.sep + 'python-parse-stdout.ejs', 'utf8')
+    var result = utils.runShellCommand(this._pythonPath + ' ' + samplePath, this.request.conf.sample_timeout)
+    var template = fs.readFileSync(constants.TEMPLATES_FOLDER + pathLib.sep + 'python-parse-stdout.ejs', 'utf8')
     var python = ejs.render(template, { stdout: result.stdout })
     var tmpPath = tempDirectory
     var filePath = tmpPath + pathLib.sep + 'python.py'
     fs.writeFileSync(filePath, python)
-    var stdout = utils.runShellCommand(this._pythonPath + ' ' + filePath)
+    var stdout = utils.runShellCommand(this._pythonPath + ' ' + filePath, this.request.conf.sample_timeout)
     if (!stdout.exitCode) {
       result.stdout = stdout.stdout
     }

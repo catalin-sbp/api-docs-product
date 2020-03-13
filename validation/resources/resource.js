@@ -1,25 +1,26 @@
 const request = require('request')
-const debug = require('../../reporter').debug
+const debug = require('../../utils/reporter').debug
 
 class Resource {
-  constructor (baseUrl) {
+  constructor (request, baseUrl) {
     this.baseUrl = baseUrl
     this._created = false
     this._deleted = false
+    this.request = request
   }
 
   async create (payload) {
-    debug('Creating ' + this.constructor.name)
+    debug(this.request, 'Creating ' + this.constructor.name)
     var result = await this._create(payload)
 
     var code = result.code
     var response = result.body
 
     if (this.idField()) {
-      debug('Success (' + code + '): ' + this.idField())
+      debug(this.request, 'Success (' + code + '): ' + this.idField())
     } else {
       var responseData = response || ''
-      debug('Status code: ' + code + ' ' + responseData)
+      debug(this.request, 'Status code: ' + code + ' ' + responseData)
     }
 
     this._created = true
@@ -27,7 +28,7 @@ class Resource {
   }
 
   async delete () {
-    debug('Removing ' + this.constructor.name + '<' + this.idField() + '>')
+    debug(this.request, 'Removing ' + this.constructor.name + '<' + this.idField() + '>')
     var response = await this._delete()
     this._deleted = true
     return response
@@ -57,6 +58,19 @@ async function _createResource (url, payload = null, accessToken = null, headers
   }
 
   return new Promise(function (resolve, reject) {
+    // var proxyUrl = 'http://192.168.1.202:8889';
+    // var proxiedRequest = request.defaults({'proxy': proxyUrl});
+    // proxiedRequest.post( {url: url, body: payload, headers: headers, json: true}, function(error, response, body) {
+    //     var code = response.statusCode;
+    //     try {
+    //         var result = {code: code, body: body};
+    //         resolve(result);
+    //     } catch {
+    //         var result = {code: code, body: null};
+    //         resolve(result);
+    //     }
+    // });
+
     request.post({ url: url, body: payload, headers: headers, json: true }, function (error, response, body) {
       if (error) {
         console.log(error)
@@ -84,6 +98,12 @@ async function _deleteResource (url, accessToken = null, headers = null) {
   }
 
   return new Promise(function (resolve, reject) {
+    // var proxyUrl = 'http://192.168.1.202:8889';
+    // var proxiedRequest = request.defaults({'proxy': proxyUrl});
+    // proxiedRequest.delete({url: url, headers: headers}, function(error, response, body) {
+    //     resolve(response.statusCode);
+    // });
+
     request.delete({ url: url, headers: headers }, function (error, response, body) {
       if (error) {
         console.log(error)

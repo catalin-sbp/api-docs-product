@@ -1,84 +1,111 @@
 const PythonRunner = require('./runners/python').PythonRunner
 const CurlRunner = require('./runners/curl').CurlRunner
 const NodeRunner = require('./runners/js').NodeRunner
+const JavaRunner = require('./runners/java').JavaRunner
 const TestExecutionResultMap = require('./validation-classes').TestExecutionResultMap
 const ResourceRegistry = require('./resources/resource-registry').ResourceRegistry
-const info = require('../info')
-const Reporter = require('../reporter').Reporter
+const Reporter = require('../utils/reporter').Reporter
+const info = require('../conf/info')
+const mongoDBManager = require('../utils/mongoDBManager')
 
 class TestSession {
-  constructor (samples) {
+  constructor (request, samples) {
     this.runners = {
-      'unirest.node': new NodeRunner(),
-      python: new PythonRunner(),
-      curl: new CurlRunner()
+      'unirest.node': new NodeRunner(request),
+      python: new PythonRunner(request),
+      curl: new CurlRunner(request),
+      java: new JavaRunner(request)
     }
 
     this.samples = samples
+    this.request = request
     this._testResultsMap = new TestExecutionResultMap()
-    this._resourceRegistry = new ResourceRegistry()
+    this._resourceRegistry = new ResourceRegistry(request)
   }
 
   async run () {
-    var reporter = new Reporter()
     var samplesByLang = {
       'unirest.node': [],
       python: [],
-      curl: []
+      curl: [],
+      java: []
     }
-
-    var results = []
 
     for (var sampleIndex in this.samples) {
       var sample = this.samples[sampleIndex]
       samplesByLang[sample.language()].push(sample)
     }
 
-    for (var lang in samplesByLang) {
-      results = results.concat(await this.runApiTestsForLang(samplesByLang[lang], lang))
-    }
-
-    reporter.printTestSessionReport(results)
-    var failedCount = 0
-    for (var result in results) {
-      failedCount += results[result].failed() ? 1 : 0
-    }
-
-    return failedCount
+    setImmediate(this.runSamplesForLang, this, samplesByLang, [])
   }
 
-  async runApiTestsForLang (samples, lang) {
-    Reporter.showLanguageScopeRun(lang)
+  runSamplesForLang (testSession, samplesByLang, results) {
+    // If there is no language left
+    if (!Object.keys(samplesByLang).length) {
+      var reporter = new Reporter(testSession.request)
+      reporter.printTestSessionReport(results)
+      var failedCount = 0
+      for (var result in results) {
+        failedCount += results[result].failed() ? 1 : 0
+      }
 
-    var testResults = []
-    var dataSubstitutions = {}
-    var allSubstitutions = {}
+      testSession.request.failedTests = failedCount
 
-    for (var sampleIndex in samples) {
-      var sample = samples[sampleIndex]
-      var prerequisiteSubs = await this.extractPrerequisiteSubs(sample)
-      var substitutions = await this.getSubstitutions(sample, lang, dataSubstitutions, allSubstitutions, prerequisiteSubs)
-      allSubstitutions = Object.assign(allSubstitutions, substitutions)
+      if (!info.commandLine) {
+        mongoDBManager.insertOne('Generation', testSession.request.getElementForDB())
+      }
 
-      Reporter.showTestIsRunning(sample)
-      var testResult = this.runners[lang].runSample(sample, substitutions)
+      info.requestReady[testSession.request.id] = true
 
-      this._testResultsMap.put(testResult, info.conf.resp_attr_replacements[sample.name], prerequisiteSubs)
-      testResults.push(testResult)
-
-      dataSubstitutions = Object.assign(dataSubstitutions, this.requestSubstitutions(sample))
-      dataSubstitutions = Object.assign(dataSubstitutions, this.makeSubstitutions(testResult.jsonBody))
-      Reporter.showShortTestStatus(testResult)
+      return
     }
 
-    await this._resourceRegistry.cleanup()
-    return testResults
+    // We run tests for the first language left, after that we remove it
+    for (var lang in samplesByLang) {
+      Reporter.showLanguageScopeRun(lang, testSession.request)
+
+      var samples = samplesByLang[lang].slice()
+      delete samplesByLang[lang]
+
+      setTimeout(testSession.runSample, 100, testSession, samples, 0, {}, {}, samplesByLang, results, lang)
+
+      break
+    }
+  }
+
+  async runSample (testSession, samples, index, dataSubstitutions, allSubstitutions, samplesByLang, results, lang) {
+    // When all samples for this language are done
+    if (index === samples.length) {
+      await testSession._resourceRegistry.cleanup()
+
+      setImmediate(testSession.runSamplesForLang, testSession, samplesByLang, results)
+
+      return
+    }
+
+    // We run the current index sample
+    var sample = samples[index]
+    var prerequisiteSubs = await testSession.extractPrerequisiteSubs(sample)
+    var substitutions = await testSession.getSubstitutions(sample, lang, dataSubstitutions, allSubstitutions, prerequisiteSubs)
+    allSubstitutions = Object.assign(allSubstitutions, substitutions)
+
+    Reporter.showTestIsRunning(sample, testSession.request)
+    var testResult = testSession.runners[lang].runSample(sample, substitutions)
+
+    testSession._testResultsMap.put(testResult, testSession.request.conf.resp_attr_replacements[sample.name], prerequisiteSubs)
+    results.push(testResult)
+
+    dataSubstitutions = Object.assign(dataSubstitutions, testSession.requestSubstitutions(sample))
+    dataSubstitutions = Object.assign(dataSubstitutions, testSession.makeSubstitutions(testResult.jsonBody))
+    Reporter.showShortTestStatus(testResult, testSession.request)
+
+    setImmediate(testSession.runSample, testSession, samples, index + 1, dataSubstitutions, allSubstitutions, samplesByLang, results, lang)
   }
 
   async getSubstitutions (sample, lang, dataSubstitutions, allSubstitutions, prerequisiteSubs) {
     var beforeSampleSubstitutions = this.beforeSampleSubstitutions(sample, lang)
     var substitutions = this._testResultsMap.getParentBody(sample, true)
-    var confSubstitutions = info.conf.substitutions ? info.conf.substitutions : {}
+    var confSubstitutions = this.request.conf.substitutions ? this.request.conf.substitutions : {}
 
     substitutions = Object.assign(substitutions, allSubstitutions)
     substitutions = Object.assign(substitutions, dataSubstitutions)
@@ -90,13 +117,13 @@ class TestSession {
   }
 
   async extractPrerequisiteSubs (sample) {
-    if (!info.conf.before_sample[sample.name]) {
+    if (!this.request.conf.before_sample[sample.name]) {
       return {}
     }
 
     var prerequisiteSubs = {}
-    for (var paramIndex in info.conf.before_sample[sample.name]) {
-      var params = info.conf.before_sample[sample.name][paramIndex]
+    for (var paramIndex in this.request.conf.before_sample[sample.name]) {
+      var params = this.request.conf.before_sample[sample.name][paramIndex]
 
       if (params.method === sample.httpMethod) {
         var subs = await this._resourceRegistry.create(params.resource, params.subs)
@@ -108,9 +135,9 @@ class TestSession {
   }
 
   requestSubstitutions (sample) {
-    if (info.conf.substitutions_before_sample[sample.name]) {
-      for (var paramIndex in info.conf.substitutions_before_sample[sample.name]) {
-        var params = info.conf.substitutions_before_sample[sample.name][paramIndex]
+    if (this.request.conf.substitutions_before_sample[sample.name]) {
+      for (var paramIndex in this.request.conf.substitutions_before_sample[sample.name]) {
+        var params = this.request.conf.substitutions_before_sample[sample.name][paramIndex]
 
         if (params.method === sample.httpMethod && params.subs['{BODY}']) {
           var jsonBody = JSON.parse(params.subs['{BODY}'])
@@ -132,9 +159,9 @@ class TestSession {
   beforeSampleSubstitutions (sample, lang) {
     var substitutions = { '{BODY}': '{}' }
 
-    if (info.conf.substitutions_before_sample[sample.name]) {
-      for (var paramIndex in info.conf.substitutions_before_sample[sample.name]) {
-        var params = info.conf.substitutions_before_sample[sample.name][paramIndex]
+    if (this.request.conf.substitutions_before_sample[sample.name]) {
+      for (var paramIndex in this.request.conf.substitutions_before_sample[sample.name]) {
+        var params = this.request.conf.substitutions_before_sample[sample.name][paramIndex]
 
         if (params.method === sample.httpMethod) {
           substitutions = Object.assign(substitutions, params.subs)
