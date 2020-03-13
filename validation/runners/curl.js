@@ -1,6 +1,6 @@
 const CodeRunner = require('./code').CodeRunner
 const fs = require('fs')
-const utils = require('../utils')
+const utils = require('../../utils/run-command')
 const errors = require('../errors.js')
 const tempDirectory = require('temp-dir')
 const pathLib = require('path')
@@ -58,7 +58,7 @@ class CurlRunner extends CodeRunner {
   _runSample (samplePath) {
     var bashBin = '/bin/bash'
 
-    return utils.runShellCommand(bashBin + ' ' + samplePath)
+    return utils.runShellCommand(bashBin + ' ' + samplePath, this.request.conf.sample_timeout)
   }
 
   _parseStdout (stdout, allowNonJSONResponse) {

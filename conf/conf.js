@@ -1,7 +1,6 @@
 const yaml = require('js-yaml')
 const fs = require('fs')
-const debug = require('../reporter').debug
-const info = require('../info')
+const debug = require('../utils/reporter').debug
 
 class Config {
   constructor (configData = {}) {
@@ -12,7 +11,7 @@ class Config {
     this.substitutions = {}
     this.resp_attr_replacements = {}
     this.always_create_environments = true
-    this.debug = false
+    this.debug = true
     this.before_sample = {}
     this.ignore_failures = {}
     this.substitutions_before_sample = {}
@@ -25,7 +24,7 @@ class Config {
     }
   }
 
-  loadConfigFile (filePath) {
+  loadConfigFile (request, filePath) {
     try {
       var doc = yaml.safeLoad(fs.readFileSync(filePath, 'utf8'))
 
@@ -33,13 +32,13 @@ class Config {
         this[key] = doc[key]
       }
     } catch {
-      debug('Config file is missing')
+      debug(request, 'No config file')
     }
 
-    this.replaceEnvVars()
+    this.replaceEnvVars(request)
   }
 
-  replaceEnvVars (raiseError = false) {
+  replaceEnvVars (request, raiseError = false) {
     if (!this.substitutions) {
       return
     }
@@ -49,7 +48,7 @@ class Config {
     for (var key in this.substitutions) {
       if (typeof (this.substitutions[key]) === 'string' && this.substitutions[key].startsWith('$')) {
         var varName = this.substitutions[key].slice(1)
-        var realValue = info.env[varName]
+        var realValue = request.env[varName]
 
         if (realValue) {
           this.substitutions[key] = realValue
@@ -62,7 +61,7 @@ class Config {
     for (key in this) {
       if (typeof this[key] === 'string' && this[key].startsWith('$')) {
         varName = this[key].slice(1)
-        realValue = info.env[varName]
+        realValue = request.env[varName]
 
         if (realValue) {
           this[key] = realValue

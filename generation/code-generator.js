@@ -1,21 +1,71 @@
 const fs = require('fs-extra')
-const info = require('../info')
+const info = require('../conf/info')
 const fileParser = require('./file-parser')
 const pathLib = require('path')
-const reporter = require('../reporter.js')
-const constants = require('../constants')
-const utils = require('../utils')
+const utils = require('../utils/utils')
 const Config = require('../conf/conf').Config
+const runShellCommand = require('../utils/run-command').runShellCommand
+const archiver = require('archiver')
+const reporter = require('../utils/reporter')
+const mongoDBManager = require('../utils/mongoDBManager')
+const constants = require('../constants')
 
-async function generateSamples (fields, files) {
-  var path
-  if (files.file.size !== 0) {
-    // I received a file or archive
-    path = await utils.createTempSourceFileFromFile(files.file)
-  } else {
-    // I received an URL
-    path = await utils.createTempSourceFileFromUrl(fields.url)
-  }
+async function saveFormInfoToRequest (fields, files, request) {
+  return new Promise(function (resolve, reject) {
+    request.setLanguages(fields)
+
+    if (fields.authentication !== 'none') {
+      if (fields.authentication === 'basic') {
+        request.authentication = 'Basic'
+      } else if (fields.authentication === 'bearer') {
+        request.authentication = 'Bearer'
+      }
+    } else {
+      request.authentication = 'None'
+    }
+
+    var host = fields.host
+    request.scheme = fields.scheme
+    request.host = host
+
+    if (host !== '') {
+      request.env.TESTING_API_URL = host
+    }
+    request.env.AUTH_TOKEN = fields.auth_token
+
+    request.keyword = fields.keyword
+    request.validate = (fields.validate === 'true')
+
+    utils.getConfigFile(fields, files, request).then((configFile) => {
+      request.conf = new Config()
+      request.conf.loadConfigFile(request, configFile)
+
+      if (files.file && files.file.size !== 0) {
+        // I received a file or archive
+        utils.createTempSourceFileFromFile(files.file).then((path) => {
+          request.pathToSpecs = path
+          mongoDBManager.insertOne('Generation', request.getElementForDB())
+
+          resolve()
+        })
+      } else {
+        // I received an URL
+        utils.createTempSourceFileFromUrl(fields.url).then((path) => {
+          request.pathToSpecs = path
+          mongoDBManager.insertOne('Generation', request.getElementForDB())
+
+          resolve()
+        })
+      }
+    })
+  })
+}
+
+async function generateSamples (request) {
+  request.logFileStream = fs.createWriteStream(request.getGenerationLogFile(), { flags: 'w' })
+
+  const firstTimerStart = Date.now()
+  var path = request.pathToSpecs
 
   var allFiles = getAllFiles(path)
 
@@ -23,30 +73,16 @@ async function generateSamples (fields, files) {
     return ''
   }
 
-  var host = fields.host
-  var scheme = fields.scheme
-
-  info.setLanguages(fields)
-
-  if (!fs.existsSync(constants.GENERATED_EXAMPLES_FOLDER)) {
-    fs.mkdirSync(constants.GENERATED_EXAMPLES_FOLDER)
-  }
-
-  if (fields.authentication !== 'none') {
-    if (fields.authentication === 'basic') {
-      info.authentication = 'Basic'
-    } else if (fields.authentication === 'bearer') {
-      info.authentication = 'Bearer'
-    }
+  if (allFiles[0].endsWith('.raml')) {
+    request.type = 'raml'
   } else {
-    info.authentication = 'None'
+    request.type = 'swagger'
   }
-  var rootDirectory = process.cwd()
-  var examplesFullPath = constants.GENERATED_EXAMPLES_FOLDER
 
-  var configFile = await utils.getConfigFile(fields, files)
-  info.conf = new Config()
-  info.conf.loadConfigFile(configFile)
+  var rootDirectory = process.cwd()
+  var examplesFullPath = request.getGeneratedSamplesFolder()
+
+  var apiNames = []
 
   for (var fileIndex in allFiles) {
     var folder = allFiles[fileIndex].replace(path, '')
@@ -55,7 +91,7 @@ async function generateSamples (fields, files) {
 
     for (var part in folderParts) {
       if (folderParts[part]) {
-        examplePath += folderParts[part] + pathLib.sep
+        examplePath += folderParts[part] + '/'
 
         if (!fs.existsSync(examplePath)) {
           fs.mkdirSync(examplePath)
@@ -63,10 +99,161 @@ async function generateSamples (fields, files) {
       }
     }
 
-    await fileParser.parse(allFiles[fileIndex], rootDirectory, examplePath, host, scheme)
+    apiNames.push(await fileParser.parse(allFiles[fileIndex], rootDirectory, examplePath, request))
   }
 
-  return examplesFullPath
+  const firstTimerEnd = Date.now()
+  request.generateExamplesTime = ((firstTimerEnd - firstTimerStart) / 1000).toString() + 's'
+  request.apiNames = apiNames
+
+  if (!info.commandLine) {
+    mongoDBManager.updateOne('Generation', request.id, { generateExamplesTime: request.generateExamplesTime, apiNames: request.apiNames, type: request.type, stage: 1 })
+  }
+  info.stageReady[request.id] = true
+}
+
+function generateArchiveWithSpecs (request, path, apiName) {
+  reporter.log(request, 'Generating archive with specs')
+  var directory = pathLib.dirname(path)
+
+  var archive = archiver('zip')
+  archive.directory(directory, apiName)
+
+  var archiveFile = fs.createWriteStream(request.getSpecsLocation('archive', apiName + '.zip'), { flags: 'w' })
+  archive.pipe(archiveFile)
+  archive.finalize()
+
+  if (info.commandLine) {
+    archiveFile.on('close', function () {
+      request.finnishCount += 1
+    })
+
+    request.totalArchives += 1
+  }
+}
+
+function generateArchive (request) {
+  request.logFileStream = fs.createWriteStream(request.getGenerationLogFile(), { flags: 'a' })
+  reporter.log(request, 'Generating archive')
+
+  var archive = archiver('zip')
+  archive.directory(request.getGeneratedSamplesFolder(), 'samples')
+
+  var archiveFile = fs.createWriteStream(request.getArchive(), { flags: 'w' })
+  archive.pipe(archiveFile)
+  archive.finalize()
+
+  if (!info.commandLine) {
+    mongoDBManager.updateOne('Generation', request.id, { stage: 3 })
+  }
+
+  info.stageReady[request.id] = true
+}
+
+function generateDocs (request) {
+  const secondTimerStart = Date.now()
+  request.logFileStream = fs.createWriteStream(request.getGenerationLogFile(), { flags: 'a' })
+  reporter.log(request, 'Generating docs page')
+
+  var examplesFullPath = request.getGeneratedSamplesFolder()
+  var path = request.pathToSpecs
+  var allFiles = getAllFiles(path)
+  var apiNames = request.apiNames
+
+  initiateDocsGeneration(request)
+
+  for (var fileIndex in allFiles) {
+    if (apiNames[fileIndex]) {
+      var folder = allFiles[fileIndex].replace(path, '')
+      var folderParts = folder.split(pathLib.sep)
+      var examplePath = examplesFullPath
+
+      for (var part in folderParts) {
+        if (folderParts[part]) {
+          examplePath += folderParts[part] + '/'
+        }
+      }
+
+      generateDocsForFile(request, allFiles[fileIndex], apiNames[fileIndex], examplePath)
+      generateArchiveWithSpecs(request, allFiles[fileIndex], apiNames[fileIndex].toLowerCase().replace(/ /g, '-'))
+    }
+  }
+
+  concatenateSlates(request)
+  generateIndexHtml(request)
+
+  request.logFileStream.end()
+  const secondTimerEnd = Date.now()
+  request.generateDocsTime = ((secondTimerEnd - secondTimerStart) / 1000).toString() + 's'
+
+  if (!info.commandLine) {
+    mongoDBManager.updateOne('Generation', request.id, { generateDocsTime: request.generateDocsTime, stage: 2 })
+  }
+  info.stageReady[request.id] = true
+}
+
+function generateDocsForFile (request, path, apiName, examplesPath) {
+  path = path.replace(/\\/g, '/')
+  if (info.onWindows) {
+    var argBuild = 'python build.py --type ' + request.type + ' --path "' + path + '" --apiname "' + apiName + '" --requestfolder "' + request.getRequestFolder() + '" --examples "' + examplesPath + '"'
+    runShellCommand(argBuild, 20, process.cwd() + '/docs/raml2markdown')
+  } else {
+    argBuild = 'python3 build.py --type ' + request.type + ' --path "' + path + '" --apiname "' + apiName + '" --requestfolder "' + request.getRequestFolder() + '" --examples "' + examplesPath + '"'
+    runShellCommand(argBuild, 20, process.cwd() + '/docs/raml2markdown')
+  }
+}
+
+function initiateDocsGeneration (request) {
+  if (info.onWindows) {
+    runShellCommand('mkdir "' + request.getDocsBuild() + '"', 20, process.cwd())
+    runShellCommand('mkdir "' + request.getDocsSource() + '"', 20, process.cwd())
+    runShellCommand('mkdir "' + request.getRequestFolder() + 'slate/"', 20, process.cwd())
+    runShellCommand('mkdir "' + request.getRequestFolder() + 'OAS/"', 20, process.cwd())
+    runShellCommand('mkdir "' + request.getRequestFolder() + 'archives/"', 20, process.cwd())
+
+    runShellCommand('XCOPY /E .\\docs\\source "' + request.getDocsSource() + '"', 20, process.cwd())
+  } else {
+    runShellCommand('mkdir "' + request.getDocsBuild() + '"', 20, process.cwd())
+    runShellCommand('mkdir "' + request.getDocsSource() + '"', 20, process.cwd())
+    runShellCommand('mkdir "' + request.getRequestFolder() + 'slate/"', 20, process.cwd())
+    runShellCommand('mkdir "' + request.getRequestFolder() + 'OAS/"', 20, process.cwd())
+    runShellCommand('mkdir "' + request.getRequestFolder() + 'archives/"', 20, process.cwd())
+
+    runShellCommand('cp -r ./docs/source "' + request.getRequestFolder() + '"', 20, process.cwd())
+  }
+}
+
+function concatenateSlates (request) {
+  if (info.onWindows) {
+    var argConcatenate = 'python concatenate.py --requestfolder ' + request.getRequestFolder() + (info.commandLine ? ' --commandline True' : '')
+    runShellCommand(argConcatenate, 20, process.cwd() + '/docs/raml2markdown')
+  } else {
+    argConcatenate = 'python3 concatenate.py --requestfolder ' + request.getRequestFolder() + (info.commandLine ? ' --commandline True' : '')
+    runShellCommand(argConcatenate, 20, process.cwd() + '/docs/raml2markdown')
+  }
+}
+
+function generateIndexHtml (request) {
+  if (info.onWindows) {
+    runShellCommand('bundle exec middleman build --source "' + request.getDocsSource().replace(process.cwd().replace(/\\/g, '/'), '..') + '" --build-dir "' + request.getDocsBuild() + '"', 20, process.cwd() + '/docs')
+  } else {
+    runShellCommand('export PATH="/usr/share/rvm/gems/ruby-2.4.2/bin:/usr/share/rvm/gems/ruby-2.4.2@global/bin:/usr/share/rvm/rubies/ruby-2.4.2/bin:$PATH" && bundle exec middleman build --source "' + request.getDocsSource().replace(process.cwd().replace(/\\/g, '/'), '..') + '" --build-dir "' + request.getDocsBuild() + '"', 20, process.cwd() + '/docs')
+  }
+
+  try {
+    var data = fs.readFileSync(request.getDocsPage(), 'utf8')
+
+    if (info.commandLine) {
+      data = data.replace(constants.HEAD_PLACEHOLDER_ANALYTICS, constants.HEAD_ANALYTICS)
+      data = data.replace(constants.BODY_PLACEHOLDER_ANALYTICS, constants.BODY_ANALYTICS)
+    } else {
+      data = data.replace(constants.HEAD_PLACEHOLDER_ANALYTICS, '')
+      data = data.replace(constants.BODY_PLACEHOLDER_ANALYTICS, '')
+    }
+    fs.writeFileSync(request.getDocsPage(), data)
+  } catch (err) {
+    console.log(err)
+  }
 }
 
 function getAllFiles (path) {
@@ -80,7 +267,7 @@ function getAllFiles (path) {
   try {
     stat = fs.statSync(path)
   } catch (err) {
-    reporter.log(err)
+    console.log(err)
     return []
   }
 
@@ -118,5 +305,8 @@ function recursiveSearch (currentDirectory, files) {
 }
 
 module.exports = {
-  generateSamples
+  generateSamples,
+  generateDocs,
+  generateArchive,
+  saveFormInfoToRequest
 }

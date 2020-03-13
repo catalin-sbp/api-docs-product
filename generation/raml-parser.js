@@ -1,16 +1,15 @@
 const wap = require('webapi-parser').WebApiParser
-var pathUtility = require('path')
 const querystring = require('querystring')
 const write = require('./write-templates')
 const pathLib = require('path')
-const info = require('../info')
-const reporter = require('../reporter')
+const reporter = require('../utils/reporter')
 
-async function parse (path, rootDirectory, examplesPath, params) {
-  reporter.log('Parsing ' + path)
+async function parse (path, rootDirectory, examplesPath, params, request) {
+  var filename = pathLib.parse(path).base
+
+  reporter.log(request, 'Parsing ' + filename)
 
   var directory = pathLib.dirname(path)
-  var filename = pathUtility.parse(path).base
 
   process.chdir(directory)
   var model = await wap.raml10.parse(`file://${filename}`).catch((err) => {
@@ -21,6 +20,13 @@ async function parse (path, rootDirectory, examplesPath, params) {
 
   const api = model.encodes
   var debug = makeDebug(api)
+
+  var title = filename.split('.')[0]
+  try {
+    title = api.name.value()
+  } catch {
+    reporter.log(request, 'This API specification does not have a title')
+  }
 
   var contentType = null
   if (api.contentType.length > 0) {
@@ -54,10 +60,10 @@ async function parse (path, rootDirectory, examplesPath, params) {
 
       setBody(operation, params)
 
-      setHeaders(operation, contentType, params)
+      setHeaders(operation, contentType, params, request)
 
       setCurl(params)
-      write.writeExampleFiles(params, examplesPath, rootDirectory)
+      write.writeExampleFiles(params, examplesPath, rootDirectory, request)
       write.writeDebug(debug, params, examplesPath)
 
       params.desc = null
@@ -67,10 +73,15 @@ async function parse (path, rootDirectory, examplesPath, params) {
       params.headers = null
       params.query_string = null
       params.curl = null
+      params.pyBody = null
+      params.javaBody = null
+      params.javaHeaders = null
     }
   }
 
   process.chdir(rootDirectory)
+
+  return title
 }
 
 function makeDebug (api) {
@@ -127,7 +138,7 @@ function getDebugFromParameter (parameter, debug) {
   }
 }
 
-function setHeaders (operation, contentType, params) {
+function setHeaders (operation, contentType, params, request) {
   var headers = {}
   if (operation.request) {
     for (var headerIndex in operation.request.headers) {
@@ -156,12 +167,21 @@ function setHeaders (operation, contentType, params) {
     headers['Content-Type'] = contentType
   }
 
-  if (info.authentication !== 'None' && headers.Authorization === undefined) {
-    headers.Authorization = info.authentication + ' <ACCESS_TOKEN>'
+  if (request.authentication !== 'None' && headers.Authorization === undefined) {
+    headers.Authorization = request.authentication + ' <ACCESS_TOKEN>'
   }
 
   if (JSON.stringify(headers) !== JSON.stringify({})) {
     params.headers = JSON.stringify(headers, null, 4)
+  }
+
+  var toParseAsJavaHeader = []
+  if (params.headers) {
+    toParseAsJavaHeader = params.headers.split('"')
+  }
+  params.javaHeaders = ''
+  for (var index = 1; index < toParseAsJavaHeader.length; index += 4) {
+    params.javaHeaders += '\t\t\t' + 'request.addHeader("' + toParseAsJavaHeader[index] + '", "' + toParseAsJavaHeader[index + 2] + '");\n'
   }
 }
 
@@ -238,6 +258,10 @@ function setBody (operation, params) {
               }
             }
             params.pyBody = checkBoolValue.join("'")
+
+            params.javaBody = params.body
+            params.javaBody = params.javaBody.split('"').join('\\"').split(/\r\n|\r|\n/).join('')
+
             return
           }
         }
@@ -247,6 +271,7 @@ function setBody (operation, params) {
     if (operation.request.payloads.length > 0) {
       params.body = JSON.stringify({})
       params.pyBody = JSON.stringify({})
+      params.javaBody = JSON.stringify({})
     }
   }
 }

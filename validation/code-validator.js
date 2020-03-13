@@ -1,47 +1,49 @@
 const loader = require('./loader')
-const Config = require('../conf/conf').Config
 const TestSession = require('./session').TestSession
-const info = require('../info')
 const pathLib = require('path')
-const utils = require('../utils')
+const fs = require('fs')
+const info = require('../conf/info')
+const mongoDBManager = require('../utils/mongoDBManager')
 
-async function validateGeneratedSamples (fields, files) {
-  if (fields.validate !== 'on') {
-    return 0
+async function validateGeneratedSamples (request) {
+  request.logFileStream = fs.createWriteStream(request.getValidationLogFile(), { flags: 'w' })
+
+  if (!info.commandLine) {
+    mongoDBManager.updateOne('Generation', request.id, { stage: 4 })
   }
 
-  var samplesPath = await makeValidationConfigurations(fields, files)
+  const timerStart = Date.now()
 
-  var samples = loader.loadCodeSamples(samplesPath, fields.keyword)
-  var testSession = new TestSession(samples)
-  var failedTestsCount = await testSession.run()
+  if (!request.validate) {
+    request.validationTime = '0s'
+    request.totalTests = 0
+    request.failedTests = 0
 
-  return failedTestsCount
+    info.requestReady[request.id] = true
+
+    if (!info.commandLine) {
+      mongoDBManager.updateOne('Generation', request.id, { validationTime: request.validationTime, totalTests: request.totalTests, failedTests: request.failedTests })
+    }
+
+    return
+  }
+
+  var samplesPath = getSamplesPath(request)
+
+  var samples = loader.loadCodeSamples(request, samplesPath, request.keyword)
+  request.totalTests = samples.length
+
+  var testSession = new TestSession(request, samples)
+  const timerEnd = Date.now()
+  request.validationTime = (timerEnd - timerStart) / 1000
+
+  await testSession.run()
+
+  info.stageReady[request.id] = true
 }
 
-async function makeValidationConfigurations (fields, files) {
-  info.setLanguages(fields)
-
-  if (fields.authentication !== 'None') {
-    if (fields.authentication === 'basic') {
-      info.authentication = 'Basic'
-    } else if (fields.authentication === 'bearer') {
-      info.authentication = 'Bearer'
-    }
-  } else {
-    info.authentication = 'None'
-  }
-  info.env.AUTH_TOKEN = fields.auth_token
-
-  if (fields.host !== '') {
-    info.env.TESTING_API_URL = fields.host
-  }
-
-  var configFile = await utils.getConfigFile(fields, files)
-  info.conf = new Config()
-  info.conf.loadConfigFile(configFile)
-
-  var samplesPath = fields.samplespath
+function getSamplesPath (request) {
+  var samplesPath = request.getGeneratedSamplesFolder()
   if (!samplesPath.endsWith(pathLib.sep)) {
     samplesPath += pathLib.sep
   }
