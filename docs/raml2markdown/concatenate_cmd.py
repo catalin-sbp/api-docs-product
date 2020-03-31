@@ -30,24 +30,17 @@ def add_api_related_resources(ofile, api):
 
     ofile.write("\n> **Get "+pretty_api_name + " related resources:**\n\n")
     
-    if specs_type == "raml":
-        ofile.write("> <div class='hexagon'><div class='hexagon-inside'><div class='hexagon-inside2'>")
-        ofile.write("<a href='./specs/oas/" + api.lower() + ".json?requestID=" + request_id + "' title='Get OpenAPI Specification Resources'>")
-        ofile.write("<img src='images/oas.png' class='openApiSpec-lg'>")
-        ofile.write("</a></div></div></div>")
-        ofile.write("\n")
-        ofile.write("> <div class='hexagon'><div class='hexagon-inside'><div class='hexagon-inside2'>")
-        ofile.write("<a href='./specs/raml/" + api.lower() + ".zip?requestID=" + request_id + "' title='Get RAML Specification Resources'>")
-        ofile.write("<img src='images/raml.png' class='ramlSpec-lg'>")
-        ofile.write("</a></div></div></div>")
-        ofile.write("\n\n")
-    else:
-        ofile.write("> <div class='hexagon'><div class='hexagon-inside'><div class='hexagon-inside2'>")
-        ofile.write("<a href='./specs/oas/" + api.lower() + ".zip?requestID=" + request_id + "' title='Get OpenAPI Specification Resources'>")
-        ofile.write("<img src='images/oas.png' class='openApiSpec-lg'>")
-        ofile.write("</a></div></div></div>")
-        ofile.write("\n\n")
-
+    ofile.write("> <div class='hexagon'><div class='hexagon-inside'><div class='hexagon-inside2'>")
+    ofile.write("<a href='./specs/oas/" + api.lower() + ".json' title='Get OpenAPI Specification Resources'>")
+    ofile.write("<img src='images/oas.png' class='openApiSpec-lg'>")
+    ofile.write("</a></div></div></div>")
+    ofile.write("\n")
+    ofile.write("> <div class='hexagon'><div class='hexagon-inside'><div class='hexagon-inside2'>")
+    ofile.write("<a href='./specs/raml/" + api.lower() + ".zip' title='Get RAML Specification Resources'>")
+    ofile.write("<img src='images/raml.png' class='ramlSpec-lg'>")
+    ofile.write("</a></div></div></div>")
+    ofile.write("\n\n")
+    
 def concatenate_files(request_path):
     code_examples_path = request_path + '/Generated examples'
     outfile = Path(request_path + "/source/index.html.md")
@@ -58,7 +51,7 @@ def concatenate_files(request_path):
         print("File: index.html.md delete failed. File not found!")
 
     with open(outfile, 'w') as ofile:
-        with open(Path("slate/index.md")) as infile:
+        with open(Path("slate/index_cmd.md")) as infile:
             ofile.write(infile.read())
 
         for api_index, api in enumerate(APIs):

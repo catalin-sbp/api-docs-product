@@ -224,11 +224,13 @@ function initiateDocsGeneration (request) {
 }
 
 function concatenateSlates (request) {
+  var pythonScript = info.commandLine ? 'concatenate_cmd.py' : 'concatenate.py'
+
   if (info.onWindows) {
-    var argConcatenate = 'python concatenate.py --requestfolder ' + request.getRequestFolder() + (info.commandLine ? ' --commandline True' : '')
+    var argConcatenate = 'python ' + pythonScript + ' --requestfolder ' + request.getRequestFolder()
     runShellCommand(argConcatenate, 20, process.cwd() + '/docs/raml2markdown')
   } else {
-    argConcatenate = 'python3 concatenate.py --requestfolder ' + request.getRequestFolder() + (info.commandLine ? ' --commandline True' : '')
+    argConcatenate = 'python3 ' + pythonScript + ' --requestfolder ' + request.getRequestFolder()
     runShellCommand(argConcatenate, 20, process.cwd() + '/docs/raml2markdown')
   }
 }
