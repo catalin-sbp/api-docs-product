@@ -114,7 +114,7 @@ def concatenate_files(request_path):
                                 )+"' title='Ask a question in Stack Overflow' target='new'>Ask a question in Stack Overflow</a></li>")
                                 ofile.write("</br>")
                                 ofile.write(
-                                    "<li><a href='https://github.com/PlatformOfTrust/docs/issues/new?assignees=&template=i-m-in-pain--here-s-the-symptoms.md&title=Customer+wish&labels=" + api.lower()+",Wish' title='Make a wish!' target='new'>Did we miss something? Make a wish!</a></li>")
+                                    "<li><a href='https://github.com/PlatformOfTrust/collected-feedback/issues/new?assignees=&labels=APIs," + api.lower()+"&template=api-wishlists.md&title=Wish+for+the+API' title='Make a wish!' target='new'>Did we miss something? Make a wish!</a></li>")
                                 ofile.write(
                                     "<div style='min-height:30px;'>&nbsp;</div>")
                                 ofile.write("</div></div></div>")
