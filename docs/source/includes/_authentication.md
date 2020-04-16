@@ -2,7 +2,7 @@
 
 Platform of Trust authentication is OAuth2 based. It's typically a good idea to explain the whole authentication process, because even to this day not everyone is familiar with how they work. In a nutshell [this is what we use](https://www.oauth.com/oauth2-servers/single-page-apps/#authorization)
 
-* You can read **practical authentication example** from Developer Portal [App development guide](https://developers.oftrust.net/guides/build-apps) 
+* You can read **practical authentication example** from Developer Portal [App development guide](https://developer.oftrust.net/guides/building-apps-platform/) 
 
 * You also take a look at sample app from Github if you prefer code driven learning. 
 
@@ -100,6 +100,6 @@ Recommended next step is to register new app:
 
 ## Authentication code example
 
-Now you have client credentials and you can start fiddling code and run you app in our [sandbox](https://developers.oftrust.net/guides/sandbox) environment. 
+Now you have client credentials and you can start fiddling code and run you app in our [sandbox](https://developer.oftrust.net/guides/open-platform-trust-sandbox/) environment. 
 Code speaks for it self! Thus we have open source (MIT license) React sample app which contains authentication implementation among other things. You can clone the sample app from Github. 
 
