@@ -9,6 +9,7 @@ const validator = require('./validation/code-validator')
 const requestInfo = require('./utils/RequestInfo')
 const mongoDBManager = require('./utils/mongoDBManager')
 const Guid = require('guid')
+const constants = require('./constants')
 
 app.use(express.static('public'))
 app.use(express.json())
@@ -336,9 +337,9 @@ if (info.onWindows) {
 
 const https = require('https')
 https.createServer({
-  key: fs.readFileSync('./certificate/star_oftrust_net_key.txt'),
-  cert: fs.readFileSync('./certificate/star.oftrust.net.crt'),
-  ca: fs.readFileSync('./certificate/star.oftrust.net.ca-bundle')
+  key: fs.readFileSync(constants.CERTIFICATE_KEY),
+  cert: fs.readFileSync(constants.CERTIFICATE_CERT),
+  ca: fs.readFileSync(constants.CERTIFICATE_CA_BUNDLE)
 }, app)
   .listen(httpsPort)
 

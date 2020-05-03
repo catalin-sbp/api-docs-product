@@ -12,6 +12,10 @@ exports.DOCS_BUILD = 'build'
 exports.REQUEST_FOLDER = process.cwd() + '/resources/Temp-Files/request_'
 exports.TEMPLATES_FOLDER = process.cwd() + '/templates'
 
+exports.CERTIFICATE_KEY = '../certificate/star_oftrust_net_key.txt'
+exports.CERTIFICATE_CA_BUNDLE = '../certificate/star.oftrust.net.ca-bundle'
+exports.CERTIFICATE_CERT = '../certificate/star.oftrust.net.crt'
+
 exports.HEAD_PLACEHOLDER_ANALYTICS = '<PlaceholderForHeadAnalytics>'
 exports.BODY_PLACEHOLDER_ANALYTICS = '<PlaceholderForBodyAnalytics>'
 exports.HEAD_ANALYTICS = `<!-- Google Tag Manager -->
