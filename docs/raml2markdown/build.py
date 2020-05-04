@@ -24,7 +24,7 @@ def api_swagger_to_slate(apiname, api_path, request_path):
 
     swagger_to_slate = local_swagger_to_slate if os.path.exists(
         local_swagger_to_slate) else "swagger-to-slate"
-    slatecmd = swagger_to_slate + " -i " + api_path + " -o " + slate_path
+    slatecmd = swagger_to_slate + " -i '" + api_path + "' -o '" + slate_path + "'"
 
     failure = os.system(slatecmd)
 
@@ -41,8 +41,8 @@ def api_raml_to_slate(apiname, raml_file, request_path):
 
     print("\nConverting "+apiname+" to Slate")
     # Generate API docs. First convert RAML -> OpenAPISpec file
-    jsoncmd = "node ./oas-raml-converter/lib/bin/converter.js --from RAML --to OAS20 " + \
-        raml_file + " > " + swagger_path
+    jsoncmd = "node ./oas-raml-converter/lib/bin/converter.js --from RAML --to OAS20 \"" + \
+        raml_file + "\" > \"" + swagger_path + "\""
     failure = os.system(jsoncmd)
 
     if failure:
@@ -55,9 +55,9 @@ def api_raml_to_slate(apiname, raml_file, request_path):
 
         swagger_to_slate = local_swagger_to_slate if os.path.exists(
             local_swagger_to_slate) else "swagger-to-slate"
-        slatecmd = swagger_to_slate + " -i " + swagger_path + " -o " + slate_path
+        slatecmd = swagger_to_slate + " -i \"" + swagger_path + "\" -o \"" + slate_path + "\""
         failure = os.system(slatecmd)
-
+  
         if failure:
             print("RAML -> Slate formatted md file creation failed.")
 

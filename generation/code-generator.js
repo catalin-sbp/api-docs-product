@@ -227,10 +227,10 @@ function concatenateSlates (request) {
   var pythonScript = info.commandLine ? 'concatenate_cmd.py' : 'concatenate.py'
 
   if (info.onWindows) {
-    var argConcatenate = 'python ' + pythonScript + ' --requestfolder ' + request.getRequestFolder()
+    var argConcatenate = 'python ' + pythonScript + ' --requestfolder "' + request.getRequestFolder() + '"'
     runShellCommand(argConcatenate, 20, process.cwd() + '/docs/raml2markdown')
   } else {
-    argConcatenate = 'python3 ' + pythonScript + ' --requestfolder ' + request.getRequestFolder()
+    argConcatenate = 'python3 ' + pythonScript + ' --requestfolder "' + request.getRequestFolder() + '"'
     runShellCommand(argConcatenate, 20, process.cwd() + '/docs/raml2markdown')
   }
 }

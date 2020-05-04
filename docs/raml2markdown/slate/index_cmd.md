@@ -14,7 +14,7 @@ toc_footers:
 includes: 
    - authentication
    - errors 
-   - feedback
+   - feedback_cmd
    
 
 search: true 
