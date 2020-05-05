@@ -69,14 +69,14 @@ You can list data products in the market place with [Product API](#product-api).
 
 > - To test APIs you need **to get needed Bearer Token** See [Authentication section](#use-bearer-token-and-how-to-get-it)
 
-> If you found a bug or missing information in the documentation, contact us at dev@oftrust.net or create an [issue in Github](https://github.com/PlatformOfTrust/collected-feedback/issues/new?assignees=&labels=API-engine&template=api-engine-issues.md&title=%5BAPI+Engine%5D%3A). 
+> If you found a bug or missing information in the documentation, contact us at dev@oftrust.net or create an [issue in Github](https://github.com/PlatformOfTrust/collected-feedback/issues/new?assignees=&labels=APIs%2C+Developer+Portal&template=api-wishlists.md&title=Wish+for+the+API). 
 
 * First **create an account in sandbox** version of World app. If you have an account in production environment, that does not work in the sandbox environment.  
 
 
-* You should **get familiar with [Authentication](#authentication) process** regardless of are you integration data sources or building applications. 
+* You should **get familiar with [Authentication](https://developer.oftrust.net/guides/integrate-oauth-20-access-platform-trust-apis/) process** regardless of are you integration data sources or building applications. 
 
-* Related to authentication is the **Bearer Token** which is needed in some of the API calls. Check out the [How to get Bearer token?](#use-bearer-token-and-how-to-get-it) 
+* Related to authentication is the **Bearer Token** which is needed in some of the API calls. Check out the [How to get Bearer token?](https://developer.oftrust.net/guides/get-bearer-token/#how-to-get-bearer-token) 
 
 * Some of the API endpoints are CORS enabled and they are marked in the description. 
 
