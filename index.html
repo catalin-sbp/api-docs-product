@@ -83,7 +83,7 @@
       var parts = split2[split2.length - 1].split('.');
       var extension = parts[parts.length - 1];
 
-      var acceptedExtensions = ['raml', 'json', 'yaml', 'zip']
+      var acceptedExtensions = ['raml', 'json', 'yaml', 'zip', 'yml']
 
       if (!(acceptedExtensions.indexOf(extension) > -1)) {
         document.getElementById("validatorFileExtension").style.display = "block";
@@ -346,7 +346,7 @@
             <h4><b>Upload API spec file</b></h4><br>
             <div class="inline-div float-left inputDiv" style="width:50%; min-width:250px ;">Load a file or archive:<br>
               <div id="validatorSize" class="warning">*2 MB maximum file size</div>
-              <div id="warningAcceptedFiles" class="warning">*Accepted files: raml, yaml, json, zip</div>
+              <div id="warningAcceptedFiles" class="warning">*Accepted files: raml, yaml, yml, json, zip</div>
               <div id="validatorFileExtension" class="validator">*Unsupported file</div>
               <div id="validatorFile" class="validator">*No File or URL Selected</div>
               <div id="FileInitial" class="filename-div" onclick="callChooseFile('#FileUploadLabel')">

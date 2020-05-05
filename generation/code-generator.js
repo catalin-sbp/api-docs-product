@@ -43,6 +43,12 @@ async function saveFormInfoToRequest (fields, files, request) {
       if (files.file && files.file.size !== 0) {
         // I received a file or archive
         utils.createTempSourceFileFromFile(files.file).then((path) => {
+          if(path.endsWith('yml')) {
+            newPath = path.replace('.yml', '.yaml')
+            fs.renameSync(path, newPath)
+            path = newPath
+          }
+
           request.pathToSpecs = path
           mongoDBManager.insertOne('Generation', request.getElementForDB())
 
@@ -51,6 +57,12 @@ async function saveFormInfoToRequest (fields, files, request) {
       } else {
         // I received an URL
         utils.createTempSourceFileFromUrl(fields.url).then((path) => {
+          if(path.endsWith('yml')) {
+            newPath = path.replace('.yml', '.yaml')
+            fs.renameSync(path, newPath)
+            path = newPath
+          }
+
           request.pathToSpecs = path
           mongoDBManager.insertOne('Generation', request.getElementForDB())
 

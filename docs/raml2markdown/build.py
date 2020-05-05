@@ -24,7 +24,7 @@ def api_swagger_to_slate(apiname, api_path, request_path):
 
     swagger_to_slate = local_swagger_to_slate if os.path.exists(
         local_swagger_to_slate) else "swagger-to-slate"
-    slatecmd = swagger_to_slate + " -i '" + api_path + "' -o '" + slate_path + "'"
+    slatecmd = swagger_to_slate + " -i \"" + api_path + "\" -o \"" + slate_path + "\""
 
     failure = os.system(slatecmd)
 
