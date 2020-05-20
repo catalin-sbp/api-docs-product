@@ -87,6 +87,17 @@ app.post('/statistics/group', (req, res) => {
   res.end()
 })
 
+app.post('/statistics/broker', (req, res) => {
+  res.write('{\n"Create APP": "')
+  res.write((req.body['Create APP'] ? req.body['Create APP'] : 'Create APP is Missing') + '",\n')
+  res.write('"Fetch CO2 Data Product": "')
+  res.write((req.body['Fetch CO2 Data Product'] ? req.body['Fetch CO2 Data Product'] : 'Fetch CO2 Data Product is Missing') + '",\n')
+  res.write('"Fetch Temperature Data Product": "')
+  res.write((req.body['Fetch Temperature Data Product'] ? req.body['Fetch Temperature Data Product'] : 'Fetch Temperature Data Product is Missing') + '"}\n')
+
+  res.end()
+})
+
 app.post('/fileupload', (req, res) => {
   var form = new formidable.IncomingForm()
   form.parse(req, function (err, fields, files) {
