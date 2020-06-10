@@ -39,11 +39,10 @@ app.post('/fileupload', (req, res) => {
       setImmediate(function () {
         request.createRequestFolder()
         request.IP = req.connection.remoteAddress
-
+        request.isReady = true
         generator.saveFormInfoToRequest(fields, files, request)
 
         info.stage[request.id] = 0
-        info.stageReady[request.id] = true
       })
     })
   })
@@ -93,8 +92,8 @@ app.get('/progress', (req, res) => {
         res.write(content)
         res.end()
 
-        if (info.stageReady[request.id]) {
-          info.stageReady[request.id] = false
+        if (request.isReady || info.stage[request.id] === 0) {
+          request.isReady = false
           info.stage[request.id] += 1
 
           switch (info.stage[request.id]) {

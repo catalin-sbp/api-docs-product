@@ -43,12 +43,11 @@ async function saveFormInfoToRequest (fields, files, request) {
       if (files.file && files.file.size !== 0) {
         // I received a file or archive
         utils.createTempSourceFileFromFile(files.file).then((path) => {
-          if(path.endsWith('yml')) {
-            newPath = path.replace('.yml', '.yaml')
+          if (path.endsWith('yml')) {
+            var newPath = path.replace('.yml', '.yaml')
             fs.renameSync(path, newPath)
             path = newPath
           }
-
           request.pathToSpecs = path
           mongoDBManager.insertOne('Generation', request.getElementForDB())
 
@@ -57,8 +56,8 @@ async function saveFormInfoToRequest (fields, files, request) {
       } else {
         // I received an URL
         utils.createTempSourceFileFromUrl(fields.url).then((path) => {
-          if(path.endsWith('yml')) {
-            newPath = path.replace('.yml', '.yaml')
+          if (path.endsWith('yml')) {
+            var newPath = path.replace('.yml', '.yaml')
             fs.renameSync(path, newPath)
             path = newPath
           }
@@ -112,6 +111,7 @@ async function generateSamples (request) {
     }
 
     apiNames.push(await fileParser.parse(allFiles[fileIndex], rootDirectory, examplePath, request))
+    request.isReady = true
   }
 
   const firstTimerEnd = Date.now()
@@ -119,9 +119,8 @@ async function generateSamples (request) {
   request.apiNames = apiNames
 
   if (!info.commandLine) {
-    mongoDBManager.updateOne('Generation', request.id, { generateExamplesTime: request.generateExamplesTime, apiNames: request.apiNames, type: request.type, stage: 1 })
+    mongoDBManager.updateOne('Generation', request.id, { generateExamplesTime: request.generateExamplesTime, apiNames: request.apiNames, type: request.type, stage: 1, isReady: true })
   }
-  info.stageReady[request.id] = true
 }
 
 function generateArchiveWithSpecs (request, path, apiName) {
@@ -156,10 +155,10 @@ function generateArchive (request) {
   archive.finalize()
 
   if (!info.commandLine) {
-    mongoDBManager.updateOne('Generation', request.id, { stage: 3 })
+    mongoDBManager.updateOne('Generation', request.id, { stage: 3, isReady: true })
   }
 
-  info.stageReady[request.id] = true
+  request.isReady = true
 }
 
 function generateDocs (request) {
@@ -199,9 +198,9 @@ function generateDocs (request) {
   request.generateDocsTime = ((secondTimerEnd - secondTimerStart) / 1000).toString() + 's'
 
   if (!info.commandLine) {
-    mongoDBManager.updateOne('Generation', request.id, { generateDocsTime: request.generateDocsTime, stage: 2 })
+    mongoDBManager.updateOne('Generation', request.id, { generateDocsTime: request.generateDocsTime, stage: 2, isReady: true })
   }
-  info.stageReady[request.id] = true
+  request.isReady = true
 }
 
 function generateDocsForFile (request, path, apiName, examplesPath) {

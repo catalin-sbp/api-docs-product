@@ -22,7 +22,7 @@ async function validateGeneratedSamples (request) {
     info.requestReady[request.id] = true
 
     if (!info.commandLine) {
-      mongoDBManager.updateOne('Generation', request.id, { validationTime: request.validationTime, totalTests: request.totalTests, failedTests: request.failedTests })
+      mongoDBManager.updateOne('Generation', request.id, { validationTime: request.validationTime, totalTests: request.totalTests, failedTests: request.failedTests, isReady: true })
     }
 
     return
@@ -39,7 +39,7 @@ async function validateGeneratedSamples (request) {
 
   await testSession.run()
 
-  info.stageReady[request.id] = true
+  request.isReady = true
 }
 
 function getSamplesPath (request) {

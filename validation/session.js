@@ -52,6 +52,7 @@ class TestSession {
       testSession.request.failedTests = failedCount
 
       if (!info.commandLine) {
+        testSession.request.isReady = true
         mongoDBManager.insertOne('Generation', testSession.request.getElementForDB())
       }
 

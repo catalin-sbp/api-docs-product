@@ -23,6 +23,7 @@ async function getRequest (id) {
         request.generateDocsTime = element.generateDocsTime
         request.validationTime = element.validationTime
         request.env = element.env
+        request.isReady = element.isReady
         request.authentication = element.authentication
         request.conf = JSON.parse(element.conf)
         request.pathToSpecs = element.pathToSpecs
@@ -47,7 +48,6 @@ async function createRequest (id) {
     } else {
       request.id = Guid.create().value
     }
-
     request.createdDate = getDate()
     request.env = {}
     request.authentication = 'None'
